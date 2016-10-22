@@ -1,0 +1,30 @@
+#!/usr/bin/env ruby
+
+require 'nsone'
+
+unless ENV["NSONE_API_KEY"]
+  puts "You need an API key! Set it in NSONE_API_KEY"
+  exit 1
+end
+
+api_key = ENV['NSONE_API_KEY']
+
+c = Nsone::Client.new(api_key)
+
+zones = c.zones
+
+zones.each do |z|
+  puts "# #{z.zone}"
+  zone = c.zone(z.zone)
+  File.open("/tmp/#{zone.zone}.yml", 'w') {|f| f.write zone.to_gdns }
+
+  # Handle domains that start with a number; CloudDNS doesn't like that a bit
+  # Also, replace periods with dashes, as they're verboten as well.
+  flat_name = zone.zone.gsub(/\./, '-')
+  gcloud_name = flat_name =~ /[\d]/ ? "domain-#{flat_name}" : flat_name
+  zone_create = "gcloud dns managed-zones create --dns-name='#{zone.zone}' --description='#{zone.zone}' #{gcloud_name}"
+  zone_import = "gcloud dns record-sets import /tmp/#{zone.zone}.yml -z=#{gcloud_name} --delete-all-existing --replace-origin-ns"
+
+  puts zone_create
+  puts zone_import
+end
